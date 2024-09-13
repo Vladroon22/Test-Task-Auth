@@ -1,0 +1,8 @@
+host="localhost" 
+port="5431"
+username="postgres"
+pass="11111"
+sslmode="sslmode=disable"
+dbname="postgres"
+
+addr_port=":3000"
