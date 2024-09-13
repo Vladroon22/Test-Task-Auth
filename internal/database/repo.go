@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/Vladroon22/Test-Task-BackDev/internal/sessions"
+	s "github.com/Vladroon22/Test-Task-BackDev/internal/sessions"
 )
 
 func (db *Storage) GetToken(id int) (string, error) {
@@ -28,8 +28,8 @@ func (db *Storage) SaveSession(id int, email, ip string, regTime time.Time, expi
 	return nil
 }
 
-func (db *Storage) GetSession(id int) (*sessions.Session, error) {
-	session := &sessions.Session{}
+func (db *Storage) GetSession(id int) (*s.Session, error) {
+	session := &s.Session{}
 	query := "SELECT FROM sessions WHERE id = $1"
 	err := db.sql.QueryRow(query, id).Scan(&session.UserID, &session.Email, &session.UserIP, &session.RegTime, &session.RefreshToken, &session.ExpireTime)
 	if err != nil {

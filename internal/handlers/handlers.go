@@ -93,7 +93,7 @@ func (rp *Repo) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 
 	var resp string
 	go func(resp *string) {
-		*resp, err = rp.sess.CheckSession(ID, r.RemoteAddr)
+		*resp, err = rp.sess.CheckSession(ID, r.RemoteAddr, RefreshTTL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			log.Panicln(err)

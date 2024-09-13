@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
+	d "github.com/Vladroon22/Test-Task-BackDev/internal/database"
 )
 
 type Session struct {
-	db           *database.Storage
+	db           *d.Storage
 	UserID       int
 	UserIP       string
 	RegTime      time.Time
@@ -20,17 +20,17 @@ type Session struct {
 	mu           sync.Mutex
 }
 
-func NewSessions(db *database.Storage) *Session {
+func NewSessions(db *d.Storage) *Session {
 	return &Session{db: db}
 }
 
-func (s *Session) CheckSession(id int, ip string) (string, error) {
+func (s *Session) CheckSession(id int, ip string, dur time.Duration) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var res bool
 	go func(res *bool) {
-		*res = s.expiresTime()
+		*res = expiresTime(dur)
 	}(&res)
 
 	sess, err := s.db.GetSession(id)
@@ -55,8 +55,8 @@ func (s *Session) CheckSession(id int, ip string) (string, error) {
 
 }
 
-func (s *Session) expiresTime() bool {
-	tk := time.NewTimer(s.ExpireTime)
+func expiresTime(d time.Duration) bool {
+	tk := time.NewTimer(d)
 	<-tk.C
 	return tk.Stop()
 }
