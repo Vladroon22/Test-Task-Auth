@@ -13,6 +13,7 @@ import (
 	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/handlers"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/service"
+	"github.com/Vladroon22/Test-Task-BackDev/internal/sessions"
 
 	"github.com/gorilla/mux"
 )
@@ -40,9 +41,10 @@ func main() {
 	}
 	log.Println("Database connected!")
 
-	repo := database.NewRepo(db)        // sql
-	srv := service.NewService(repo)     // sql - interface
-	h := handlers.NewHandler(repo, srv) // ручки
+	repo := database.NewRepo(db)              // sessions
+	sess := sessions.NewSessions(repo)        // sql
+	srv := service.NewService(repo)           // sql - interface
+	h := handlers.NewHandler(repo, srv, sess) // handlers
 
 	router := mux.NewRouter()
 	router.HandleFunc("/getTokenPair/{id:[0-9]+}", h.GetPair).Methods("GET")

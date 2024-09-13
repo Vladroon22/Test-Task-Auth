@@ -20,8 +20,10 @@ type Session struct {
 	repo         *database.Repo
 }
 
-func NewSessions() *Session {
-	return &Session{}
+func NewSessions(r *database.Repo) *Session {
+	return &Session{
+		repo: r,
+	}
 }
 
 func (s *Session) CheckSession(id int, ip string, dur time.Duration, sess *database.MySession) (string, error) {
@@ -48,7 +50,6 @@ func (s *Session) CheckSession(id int, ip string, dur time.Duration, sess *datab
 			return "OK", nil
 		}
 	}
-
 }
 
 func expiresTime(d time.Duration) bool {

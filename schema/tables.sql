@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     email VARCHAR(30) NOT NULL,
     userID INT NOT NULL,                   
     userIP VARCHAR(45) NOT NULL,           
-    regTime TIMESTAMP NOT NULL,            
+    regTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,            
     expireTime TIMESTAMP NOT NULL,         
     refresh VARCHAR(255) NOT NULL
 );

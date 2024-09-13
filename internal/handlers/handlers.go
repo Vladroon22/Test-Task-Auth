@@ -25,11 +25,11 @@ type Handlers struct {
 	sess *sessions.Session
 }
 
-func NewHandler(d *database.Repo, s *service.Service) *Handlers {
+func NewHandler(d *database.Repo, s *service.Service, session *sessions.Session) *Handlers {
 	return &Handlers{
 		db:   d,
 		srv:  s,
-		sess: sessions.NewSessions(),
+		sess: session,
 	}
 }
 
@@ -77,10 +77,7 @@ func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 	SetCookie(w, "jwt", token)
 	SetCookie(w, "refresh", refreshToken)
 
-	WriteJSON(w, http.StatusOK, map[string]interface{}{ // надо убрать
-		"access":  token,
-		"refresh": refreshToken,
-	})
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"access": token, "refresh": refreshToken})
 }
 
 func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {

@@ -2,7 +2,6 @@ package auth
 
 import (
 	"encoding/base64"
-	"errors"
 	"math/rand"
 	"time"
 
@@ -17,25 +16,6 @@ type MyClaims struct {
 	jwt.StandardClaims
 	Id int    `json:"id"`
 	IP string `json:"ip"`
-}
-
-func ValidateToken(tokenStr string) (*MyClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &MyClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return signKey, nil
-	})
-	if err != nil {
-		if err == jwt.ErrSignatureInvalid {
-			return nil, errors.New("Invalid-Signature")
-		}
-		return nil, errors.New("Bad-Request")
-	}
-
-	claims, ok := token.Claims.(*MyClaims)
-	if !ok || !token.Valid {
-		return nil, errors.New("Unauthorized")
-	}
-
-	return claims, nil
 }
 
 func GenerateJWT(ip string, id int, TTL time.Duration) (string, error) {

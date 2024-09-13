@@ -16,7 +16,7 @@ type MySession struct {
 	UserIP       string
 	RegTime      time.Time
 	RefreshToken string
-	ExpireTime   time.Time
+	ExpireTime   time.Duration
 }
 
 func NewRepo(db *Storage) *Repo {
