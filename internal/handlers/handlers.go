@@ -1,4 +1,4 @@
-package database
+package handlers
 
 import (
 	"encoding/json"
@@ -9,24 +9,27 @@ import (
 
 	"github.com/Vladroon22/Test-Task-BackDev/internal/auth"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
+	"github.com/Vladroon22/Test-Task-BackDev/internal/service"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/sessions"
 	"github.com/gorilla/mux"
 )
 
 const (
-	AccessTTL  = 15 * time.Second
-	RefreshTTL = time.Hour
+	AccessTTL  = time.Minute * 15
+	RefreshTTL = time.Minute * 60
 )
 
-type Repo struct {
-	db   *database.Storage
+type Handlers struct {
+	db   *database.Repo
+	srv  *service.Service
 	sess *sessions.Session
 }
 
-func NewRepo(d *database.Storage) *Repo {
-	return &Repo{
+func NewHandler(d *database.Repo, s *service.Service) *Handlers {
+	return &Handlers{
 		db:   d,
-		sess: sessions.NewSessions(d),
+		srv:  s,
+		sess: sessions.NewSessions(),
 	}
 }
 
@@ -42,7 +45,7 @@ func SetCookie(w http.ResponseWriter, cookieName string, cookies string) {
 	http.SetCookie(w, cookie)
 }
 
-func (rp *Repo) GetPair(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	userID, _ := strconv.Atoi(vars["id"])
 
@@ -65,7 +68,7 @@ func (rp *Repo) GetPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := rp.db.SaveSession(userID, "1234@mail.ru", r.RemoteAddr, time.Now(), RefreshTTL, refreshToken); err != nil {
+	if err := h.srv.SaveSession(userID, "1234@mail.ru", r.RemoteAddr, time.Now(), RefreshTTL, refreshToken); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Panicln(err)
 		return
@@ -80,11 +83,18 @@ func (rp *Repo) GetPair(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (rp *Repo) MakeRefresh(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID, _ := strconv.Atoi(vars["id"])
 
-	_, err := rp.db.GetToken(ID)
+	_, err := h.srv.GetToken(ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Panicln(err)
+		return
+	}
+
+	session, err := h.srv.GetSession(ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Panicln(err)
@@ -93,7 +103,7 @@ func (rp *Repo) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 
 	var resp string
 	go func(resp *string) {
-		*resp, err = rp.sess.CheckSession(ID, r.RemoteAddr, RefreshTTL)
+		*resp, err = h.sess.CheckSession(ID, r.RemoteAddr, RefreshTTL, session)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			log.Panicln(err)

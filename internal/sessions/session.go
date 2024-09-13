@@ -6,11 +6,10 @@ import (
 	"sync"
 	"time"
 
-	d "github.com/Vladroon22/Test-Task-BackDev/internal/database"
+	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
 )
 
 type Session struct {
-	db           *d.Storage
 	UserID       int
 	UserIP       string
 	RegTime      time.Time
@@ -18,13 +17,14 @@ type Session struct {
 	RefreshToken string
 	Email        string
 	mu           sync.Mutex
+	repo         *database.Repo
 }
 
-func NewSessions(db *d.Storage) *Session {
-	return &Session{db: db}
+func NewSessions() *Session {
+	return &Session{}
 }
 
-func (s *Session) CheckSession(id int, ip string, dur time.Duration) (string, error) {
+func (s *Session) CheckSession(id int, ip string, dur time.Duration, sess *database.MySession) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -33,14 +33,10 @@ func (s *Session) CheckSession(id int, ip string, dur time.Duration) (string, er
 		*res = expiresTime(dur)
 	}(&res)
 
-	sess, err := s.db.GetSession(id)
-	if err != nil {
-		return "", err
-	}
 	if sess.UserID != id {
 		return "", errors.New("No-such-userID")
 	} else {
-		if sess.userIP != ip {
+		if sess.UserIP != ip {
 			s.DeleteSession(id)
 			log.Println("Session deleted: IP-address was changed")
 			return "Session deleted: IP-address was changed", nil
@@ -65,5 +61,5 @@ func (s *Session) DeleteSession(id int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.db.DeleteSessionFromDB(id)
+	s.repo.DeleteSessionFromDB(id)
 }

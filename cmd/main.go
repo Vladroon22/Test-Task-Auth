@@ -9,9 +9,10 @@ import (
 	"syscall"
 
 	"github.com/BurntSushi/toml"
-	c "github.com/Vladroon22/Test-Task-BackDev/config"
+	"github.com/Vladroon22/Test-Task-BackDev/config"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
-	h "github.com/Vladroon22/Test-Task-BackDev/internal/handlers"
+	"github.com/Vladroon22/Test-Task-BackDev/internal/handlers"
+	"github.com/Vladroon22/Test-Task-BackDev/internal/service"
 
 	"github.com/gorilla/mux"
 )
@@ -25,7 +26,7 @@ func main() {
 
 	flag.StringVar(&Toml, "path-to-toml", "./config/conf.toml", "path-to-toml")
 
-	cnf := c.CreateConfig()
+	cnf := config.CreateConfig()
 	_, err := toml.DecodeFile(Toml, cnf)
 	if err != nil {
 		log.Panicln(err)
@@ -39,10 +40,13 @@ func main() {
 	}
 	log.Println("Database connected!")
 
-	repo := h.NewRepo(db)
+	repo := database.NewRepo(db)        // sql
+	srv := service.NewService(repo)     // sql - interface
+	h := handlers.NewHandler(repo, srv) // ручки
+
 	router := mux.NewRouter()
-	router.HandleFunc("/getTokenPair/{id:[0-9]+}", repo.GetPair).Methods("GET")
-	router.HandleFunc("/makeRefresh/{id:[0-9]+}", repo.MakeRefresh).Methods("GET")
+	router.HandleFunc("/getTokenPair/{id:[0-9]+}", h.GetPair).Methods("GET")
+	router.HandleFunc("/makeRefresh/{id:[0-9]+}", h.MakeRefresh).Methods("GET")
 	log.Println("Router established")
 
 	log.Println("Server is listening --> localhost" + cnf.Addr_PORT)
