@@ -8,7 +8,7 @@ import (
 
 type Handlers interface {
 	GetToken(id int) (string, error)
-	SaveSession(id int, email, ip string, regTime time.Time, expireTime time.Duration, rt string) error
+	SaveSession(id int, email, ip string, regTime time.Time, rt string) error
 	GetSession(id int) (*database.MySession, error)
 	DeleteSessionFromDB(id int) error
 }

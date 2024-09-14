@@ -1,9 +1,6 @@
 package sessions
 
 import (
-	"errors"
-	"log"
-	"sync"
 	"time"
 
 	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
@@ -12,11 +9,9 @@ import (
 type Session struct {
 	UserID       int
 	UserIP       string
-	RegTime      time.Time
-	ExpireTime   time.Duration
+	expireAt     time.Time
 	RefreshToken string
 	Email        string
-	mu           sync.Mutex
 	repo         *database.Repo
 }
 
@@ -26,41 +21,24 @@ func NewSessions(r *database.Repo) *Session {
 	}
 }
 
-func (s *Session) CheckSession(id int, ip string, dur time.Duration, sess *database.MySession) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var res bool
-	go func(res *bool) {
-		*res = expiresTime(dur)
-	}(&res)
-
+func (s *Session) CheckSession(id int, ip string, dur time.Duration, sess *database.MySession) string {
 	if sess.UserID != id {
-		return "", errors.New("No-such-userID")
-	} else {
-		if sess.UserIP != ip {
-			s.DeleteSession(id)
-			log.Println("Session deleted: IP-address was changed")
-			return "Session deleted: IP-address was changed", nil
-		} else if !res {
-			s.DeleteSession(id)
-			log.Println("Session deleted: token's time is expired")
-			return "Session deleted: token's time is expired", nil
-		} else {
-			return "OK", nil
-		}
+		return "No-such-session"
 	}
-}
 
-func expiresTime(d time.Duration) bool {
-	tk := time.NewTimer(d)
-	<-tk.C
-	return tk.Stop()
+	if time.Now().After(sess.ExpiresAt) {
+		s.DeleteSession(id)
+		return "Session deleted: session expired"
+	}
+
+	if sess.UserIP != ip {
+		s.DeleteSession(id)
+		return "Session deleted: IP-address was changed"
+	}
+
+	return "OK"
 }
 
 func (s *Session) DeleteSession(id int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.repo.DeleteSessionFromDB(id)
 }

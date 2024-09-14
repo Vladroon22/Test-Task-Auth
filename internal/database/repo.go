@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"time"
 )
@@ -14,9 +15,8 @@ type MySession struct {
 	UserID       int
 	Email        string
 	UserIP       string
-	RegTime      time.Time
+	ExpiresAt    time.Time
 	RefreshToken string
-	ExpireTime   time.Duration
 }
 
 func NewRepo(db *Storage) *Repo {
@@ -26,7 +26,7 @@ func NewRepo(db *Storage) *Repo {
 }
 func (rp *Repo) GetToken(id int) (string, error) {
 	var refreshToken string
-	query := "SELECT refresh FROM sessions WHERE id = $1"
+	query := "SELECT refresh FROM sessions WHERE userID = $1"
 	err := rp.sql.sql.QueryRow(query, id).Scan(&refreshToken)
 	if err == sql.ErrNoRows || err != nil {
 		log.Panicln(err)
@@ -35,9 +35,9 @@ func (rp *Repo) GetToken(id int) (string, error) {
 	return refreshToken, nil
 }
 
-func (rp *Repo) SaveSession(id int, email, ip string, regTime time.Time, expireTime time.Duration, rt string) error {
-	query := "INSERT INTO sessions (userID, email, userIP, regTime, expireTime, refresh) VALUES ($1, $2, $3, $4, $5, $6)"
-	if _, err := rp.sql.sql.Exec(query, id, email, ip, regTime.Format(time.DateTime), expireTime, rt); err != nil {
+func (rp *Repo) SaveSession(id int, email, ip string, expireAt time.Time, rt string) error {
+	query := "INSERT INTO sessions (userID, email, userIP, expireAt, refresh) VALUES ($1, $2, $3, $4, $5)"
+	if _, err := rp.sql.sql.Exec(query, id, email, ip, expireAt.Format(time.DateTime), rt); err != nil {
 		log.Panicln(err)
 		return err
 	}
@@ -45,9 +45,18 @@ func (rp *Repo) SaveSession(id int, email, ip string, regTime time.Time, expireT
 }
 
 func (rp *Repo) GetSession(id int) (*MySession, error) {
+	if rp.sql.sql == nil {
+		return nil, errors.New("database connection is nil")
+	}
+
 	session := &MySession{}
-	query := "SELECT FROM sessions WHERE id = $1"
-	err := rp.sql.sql.QueryRow(query, id).Scan(&session.UserID, &session.Email, &session.UserIP, &session.RegTime, &session.RefreshToken, &session.ExpireTime)
+	query := "SELECT userID, email, userIP, expireAt, refresh FROM sessions WHERE userID = $1"
+	err := rp.sql.sql.QueryRow(query, id).Scan(&session.UserID, &session.Email, &session.UserIP, &session.ExpiresAt, &session.RefreshToken)
+
+	if err == sql.ErrNoRows {
+		return nil, errors.New("no session found for userID")
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +64,7 @@ func (rp *Repo) GetSession(id int) (*MySession, error) {
 }
 
 func (rp *Repo) DeleteSessionFromDB(id int) error {
-	query := "DELETE FROM sessions WHERE id = $1"
+	query := "DELETE FROM sessions WHERE userID = $1"
 	if _, err := rp.sql.sql.Exec(query, id); err != nil {
 		return err
 	}

@@ -45,6 +45,18 @@ func SetCookie(w http.ResponseWriter, cookieName string, cookies string) {
 	http.SetCookie(w, cookie)
 }
 
+func ClearCookie(w http.ResponseWriter, cookieName string, cookies string) {
+	cookie := &http.Cookie{
+		Name:     cookieName,
+		Value:    cookies,
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		Secure:   false,
+		HttpOnly: true,
+	}
+	http.SetCookie(w, cookie)
+}
+
 func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	userID, _ := strconv.Atoi(vars["id"])
@@ -68,7 +80,7 @@ func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.srv.SaveSession(userID, "1234@mail.ru", r.RemoteAddr, time.Now(), RefreshTTL, refreshToken); err != nil {
+	if err := h.srv.SaveSession(userID, "1234@mail.ru", r.RemoteAddr, time.Now().Add(RefreshTTL), refreshToken); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Panicln(err)
 		return
@@ -84,13 +96,6 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID, _ := strconv.Atoi(vars["id"])
 
-	_, err := h.srv.GetToken(ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Panicln(err)
-		return
-	}
-
 	session, err := h.srv.GetSession(ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -98,17 +103,19 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resp string
-	go func(resp *string) {
-		*resp, err = h.sess.CheckSession(ID, r.RemoteAddr, RefreshTTL, session)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			log.Panicln(err)
-			return
-		}
-	}(&resp)
+	respChan := make(chan string)
+	go func(respChan chan<- string) {
+		resp := h.sess.CheckSession(ID, r.RemoteAddr, RefreshTTL, session)
+		respChan <- resp
+		log.Println(resp)
+	}(respChan)
+	resp := <-respChan
+	log.Println(resp)
 
 	if resp != "OK" {
+		ClearCookie(w, "jwt", "")
+		ClearCookie(w, "refresh", "")
+
 		token, err := auth.GenerateJWT(r.RemoteAddr, ID, AccessTTL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
