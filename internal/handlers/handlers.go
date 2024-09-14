@@ -7,8 +7,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Vladroon22/Test-Task-BackDev/config"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/auth"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
+	"github.com/Vladroon22/Test-Task-BackDev/internal/mailer"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/service"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/sessions"
 	"github.com/gorilla/mux"
@@ -16,20 +18,22 @@ import (
 
 const (
 	AccessTTL  = time.Minute * 15
-	RefreshTTL = time.Minute * 60
+	RefreshTTL = time.Second * 10
 )
 
 type Handlers struct {
 	db   *database.Repo
 	srv  *service.Service
 	sess *sessions.Session
+	cnf  *config.Config
 }
 
-func NewHandler(d *database.Repo, s *service.Service, session *sessions.Session) *Handlers {
+func NewHandler(d *database.Repo, s *service.Service, session *sessions.Session, c *config.Config) *Handlers {
 	return &Handlers{
 		db:   d,
 		srv:  s,
 		sess: session,
+		cnf:  c,
 	}
 }
 
@@ -80,7 +84,7 @@ func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.srv.SaveSession(userID, "1234@mail.ru", r.RemoteAddr, time.Now().Add(RefreshTTL), refreshToken); err != nil {
+	if err := h.srv.SaveSession(userID, h.cnf.Email, r.RemoteAddr, time.Now().Add(RefreshTTL), refreshToken); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Panicln(err)
 		return
@@ -113,6 +117,23 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	log.Println(resp)
 
 	if resp != "OK" {
+		sender, err := mailer.NewSender(session.Email, h.cnf.AppPass, "smtp.mail.ru", 587)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Panicln(err)
+			return
+		}
+		err = sender.Send(&mailer.EmailInput{
+			To:      session.Email,
+			Subject: "WarningMessage",
+			Body:    resp,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Panicln(err)
+			return
+		}
+
 		ClearCookie(w, "jwt", "")
 		ClearCookie(w, "refresh", "")
 

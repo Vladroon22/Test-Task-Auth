@@ -3,14 +3,13 @@ package auth
 import (
 	"encoding/base64"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 )
 
-const (
-	signKey = "g78tn8&*^T%RYGY^&T"
-)
+var signKey = os.Getenv("JWT")
 
 type MyClaims struct {
 	jwt.StandardClaims

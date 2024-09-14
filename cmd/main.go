@@ -1,14 +1,12 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/BurntSushi/toml"
 	"github.com/Vladroon22/Test-Task-BackDev/config"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/handlers"
@@ -18,21 +16,9 @@ import (
 	"github.com/gorilla/mux"
 )
 
-var (
-	Toml string
-)
-
 func main() {
-	flag.Parse()
-
-	flag.StringVar(&Toml, "path-to-toml", "./config/conf.toml", "path-to-toml")
 
 	cnf := config.CreateConfig()
-	_, err := toml.DecodeFile(Toml, cnf)
-	if err != nil {
-		log.Panicln(err)
-		return
-	}
 
 	db := database.NewDB(cnf)
 	if err := db.Connect(); err != nil {
@@ -41,10 +27,10 @@ func main() {
 	}
 	log.Println("Database connected!")
 
-	repo := database.NewRepo(db)              // sessions
-	sess := sessions.NewSessions(repo)        // sql
-	srv := service.NewService(repo)           // sql - interface
-	h := handlers.NewHandler(repo, srv, sess) // handlers
+	repo := database.NewRepo(db)                   // sql
+	sess := sessions.NewSessions(repo)             // sessions
+	srv := service.NewService(repo)                // sql - interface
+	h := handlers.NewHandler(repo, srv, sess, cnf) // handlers
 
 	router := mux.NewRouter()
 	router.HandleFunc("/getTokenPair/{id:[0-9]+}", h.GetPair).Methods("GET")

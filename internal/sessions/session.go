@@ -26,16 +26,15 @@ func (s *Session) CheckSession(id int, ip string, dur time.Duration, sess *datab
 		return "No-such-session"
 	}
 
-	if time.Now().After(sess.ExpiresAt) {
-		s.DeleteSession(id)
-		return "Session deleted: session expired"
-	}
-
 	if sess.UserIP != ip {
 		s.DeleteSession(id)
 		return "Session deleted: IP-address was changed"
 	}
 
+	if time.Now().Before(sess.ExpiresAt) {
+		s.DeleteSession(id)
+		return "Session deleted: session expired"
+	}
 	return "OK"
 }
 

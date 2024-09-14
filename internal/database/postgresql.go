@@ -31,7 +31,7 @@ func (db *Storage) Connect() error {
 }
 
 func (db *Storage) configurate(cnf c.Config) error {
-	source := fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?%s", cnf.Username, cnf.Password, cnf.Host, cnf.Port, cnf.DBname, cnf.SSLmode)
+	source := fmt.Sprintf("postgresql://%s", cnf.DB)
 	log.Println(source)
 	sqlConn, err := sql.Open("postgres", source)
 	if err != nil {
