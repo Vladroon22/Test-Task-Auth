@@ -5,3 +5,9 @@ build:
 
 run: build
 	./app
+
+test-auth:
+	go test ./internal/auth
+
+test-mail:
+	go test ./internal/mailer

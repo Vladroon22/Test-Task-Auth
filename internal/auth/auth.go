@@ -65,7 +65,6 @@ func ValidateRT(storedHash, providedRT string) error {
 		return fmt.Errorf("failed to decode provided refresh token: %w", err)
 	}
 
-	// Проверяем токен на соответствие хэшу
 	err = bcrypt.CompareHashAndPassword([]byte(storedHash), decodedRT)
 	if err != nil {
 		if err == bcrypt.ErrMismatchedHashAndPassword {

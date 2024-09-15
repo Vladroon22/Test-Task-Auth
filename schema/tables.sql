@@ -1,6 +1,3 @@
--- Active: 1726402538227@@127.0.0.1@5431@postgres
-
-
 CREATE TABLE IF NOT EXISTS sessions (
     email VARCHAR(30) NOT NULL,
     userID INT NOT NULL,                   

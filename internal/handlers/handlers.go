@@ -45,7 +45,6 @@ func SetCookie(w http.ResponseWriter, cookieName string, cookies string, exp tim
 		Secure:   false,
 		HttpOnly: true,
 		Expires:  time.Now().Add(exp),
-		SameSite: http.SameSiteDefaultMode,
 	}
 	http.SetCookie(w, cookie)
 }
@@ -87,14 +86,20 @@ func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type input struct {
+	refresh string `json:"refresh"`
+}
+
 func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID, _ := strconv.Atoi(vars["id"])
 
-	var input struct {
-		refresh string `json:"refresh"`
+	inp := input{}
+	if err := json.NewDecoder(r.Body).Decode(&inp.refresh); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
-	json.NewDecoder(r.Body).Decode(&input.refresh)
 
 	session, err := h.srv.GetSession(ID)
 	if err != nil {
@@ -103,7 +108,7 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := auth.ValidateRT(session.RefreshToken, input.refresh); err != nil {
+	if err := auth.ValidateRT(session.RefreshToken, inp.refresh); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Println(err)
 		return

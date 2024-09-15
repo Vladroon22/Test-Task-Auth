@@ -27,10 +27,10 @@ func main() {
 	}
 	log.Println("Database connected!")
 
-	repo := database.NewRepo(db)                   // sql
-	sess := sessions.NewSessions(repo)             // sessions
-	srv := service.NewService(repo)                // sql - interface
-	h := handlers.NewHandler(repo, srv, sess, cnf) // handlers
+	repo := database.NewRepo(db)
+	sess := sessions.NewSessions(repo)
+	srv := service.NewService(repo)
+	h := handlers.NewHandler(repo, srv, sess, cnf)
 
 	router := mux.NewRouter()
 	router.HandleFunc("/getTokenPair/{id:[0-9]+}", h.GetPair).Methods("GET")
