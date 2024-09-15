@@ -9,7 +9,7 @@ import (
 type Session struct {
 	UserID       int
 	UserIP       string
-	expireAt     time.Time
+	ExpireAt     time.Time
 	RefreshToken string
 	Email        string
 	repo         *database.Repo
@@ -26,10 +26,11 @@ func (s *Session) CheckSession(id int, ip string, dur time.Duration, sess *datab
 		s.DeleteSession(id)
 		return "No such session"
 	}
-	//if sess.UserIP != ip {
-	//	s.DeleteSession(id)
-	//	return "Session deleted: IP-address was changed"
-	//}
+
+	if sess.UserIP != ip {
+		s.DeleteSession(id)
+		return "Session deleted: IP-address was changed"
+	}
 
 	if !time.Now().Before(sess.ExpiresAt) {
 		s.DeleteSession(id)

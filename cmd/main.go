@@ -8,7 +8,6 @@ import (
 	"syscall"
 
 	"github.com/Vladroon22/Test-Task-BackDev/config"
-	"github.com/Vladroon22/Test-Task-BackDev/internal/auth"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/handlers"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/service"
@@ -35,7 +34,7 @@ func main() {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/getTokenPair/{id:[0-9]+}", h.GetPair).Methods("GET")
-	router.HandleFunc("/makeRefresh/{id:[0-9]+}", auth.AuthMiddleWare(h.MakeRefresh)).Methods("GET")
+	router.HandleFunc("/makeRefresh/{id:[0-9]+}", h.MakeRefresh).Methods("POST")
 	log.Println("Router established")
 
 	log.Println("Server is listening --> localhost" + cnf.Addr_PORT)

@@ -91,8 +91,19 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID, _ := strconv.Atoi(vars["id"])
 
+	var input struct {
+		refresh string `json:"refresh"`
+	}
+	json.NewDecoder(r.Body).Decode(&input.refresh)
+
 	session, err := h.srv.GetSession(ID)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		return
+	}
+
+	if err := auth.ValidateRT(session.RefreshToken, input.refresh); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Println(err)
 		return

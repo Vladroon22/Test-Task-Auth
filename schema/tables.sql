@@ -1,4 +1,4 @@
--- Active: 1725963449851@@127.0.0.1@5431@postgres@public
+-- Active: 1726402538227@@127.0.0.1@5431@postgres
 
 
 CREATE TABLE IF NOT EXISTS sessions (

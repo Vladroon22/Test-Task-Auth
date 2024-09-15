@@ -1,11 +1,10 @@
 package auth
 
 import (
-	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"math/rand"
-	"net/http"
 	"os"
 	"time"
 
@@ -60,43 +59,20 @@ func GenerateRT() (string, error) {
 	return string(HashRT), nil
 }
 
-func ValidateToken(tokenStr string) (*MyClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &MyClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return signKey, nil
-	})
+func ValidateRT(storedHash, providedRT string) error {
+	decodedRT, err := base64.StdEncoding.DecodeString(providedRT)
 	if err != nil {
-		if err == jwt.ErrSignatureInvalid {
-			return nil, errors.New("Unauthorized")
-		}
-		return nil, errors.New("Bad-Request")
+		return fmt.Errorf("failed to decode provided refresh token: %w", err)
 	}
 
-	claims, ok := token.Claims.(*MyClaims)
-	if !ok || !token.Valid {
-		return nil, errors.New("Unauthorized")
+	// Проверяем токен на соответствие хэшу
+	err = bcrypt.CompareHashAndPassword([]byte(storedHash), decodedRT)
+	if err != nil {
+		if err == bcrypt.ErrMismatchedHashAndPassword {
+			return errors.New(err.Error())
+		}
+		return errors.New(err.Error())
 	}
 
-	return claims, nil
-}
-
-func AuthMiddleWare(next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie("jwt")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-		if cookie.Value == "" {
-			http.Error(w, "Cookie is empty", http.StatusUnauthorized)
-			return
-		}
-		claims, err := ValidateToken(cookie.Value)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-		r = r.WithContext(context.WithValue(r.Context(), "id", claims.Id))
-
-		next(w, r)
-	})
+	return nil
 }
