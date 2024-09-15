@@ -18,3 +18,9 @@ export AppPass="your application password
 <h2>How to run</h2>
 
 ``` make run ```
+
+<h2>To run tests</h2>
+
+``` make test-mailer```
+
+``` make test-auth```
