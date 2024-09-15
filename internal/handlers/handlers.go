@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	AccessTTL  = time.Minute * 15
-	RefreshTTL = time.Second * 10
+	AccessTTL  = time.Minute * 10
+	RefreshTTL = time.Minute * 60
 )
 
 type Handlers struct {
@@ -37,14 +37,15 @@ func NewHandler(d *database.Repo, s *service.Service, session *sessions.Session,
 	}
 }
 
-func SetCookie(w http.ResponseWriter, cookieName string, cookies string) {
+func SetCookie(w http.ResponseWriter, cookieName string, cookies string, exp time.Duration) {
 	cookie := &http.Cookie{
 		Name:     cookieName,
 		Value:    cookies,
 		Path:     "/",
 		Secure:   false,
 		HttpOnly: true,
-		Expires:  time.Now().Add(AccessTTL),
+		Expires:  time.Now().Add(exp),
+		SameSite: http.SameSiteDefaultMode,
 	}
 	http.SetCookie(w, cookie)
 }
@@ -65,35 +66,25 @@ func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	userID, _ := strconv.Atoi(vars["id"])
 
-	token, err := auth.GenerateJWT(r.RemoteAddr, userID, AccessTTL)
+	tokens, err := GenerateTokens(r.RemoteAddr, userID, AccessTTL)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
-		log.Panicln(err)
-		return
-	}
-	if token == "" {
-		http.Error(w, "token is empty", http.StatusUnauthorized)
-		log.Panicln("token is empty")
+		log.Println(err)
 		return
 	}
 
-	refreshToken, err := auth.GenerateRT()
-	if err != nil {
+	if err := h.srv.SaveSession(userID, h.cnf.Email, r.RemoteAddr, time.Now().Add(RefreshTTL), tokens.RT); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Panicln(err)
+		log.Println(err)
 		return
 	}
 
-	if err := h.srv.SaveSession(userID, h.cnf.Email, r.RemoteAddr, time.Now().Add(RefreshTTL), refreshToken); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Panicln(err)
-		return
-	}
+	SetCookie(w, "jwt", tokens.JWT, AccessTTL)
+	SetCookie(w, "refresh", tokens.RT, RefreshTTL)
 
-	SetCookie(w, "jwt", token)
-	SetCookie(w, "refresh", refreshToken)
-
-	WriteJSON(w, http.StatusOK, map[string]interface{}{"access": token, "refresh": refreshToken})
+	WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"Session": "OK",
+	})
 }
 
 func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
@@ -103,61 +94,73 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	session, err := h.srv.GetSession(ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Panicln(err)
+		log.Println(err)
 		return
 	}
 
-	respChan := make(chan string)
-	go func(respChan chan<- string) {
-		resp := h.sess.CheckSession(ID, r.RemoteAddr, RefreshTTL, session)
-		respChan <- resp
-		log.Println(resp)
-	}(respChan)
-	resp := <-respChan
+	resp := h.sess.CheckSession(ID, r.RemoteAddr, RefreshTTL, session)
 	log.Println(resp)
 
 	if resp != "OK" {
-		sender, err := mailer.NewSender(session.Email, h.cnf.AppPass, "smtp.mail.ru", 587)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Panicln(err)
-			return
-		}
-		err = sender.Send(&mailer.EmailInput{
-			To:      session.Email,
-			Subject: "WarningMessage",
-			Body:    resp,
-		})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Panicln(err)
-			return
-		}
-
 		ClearCookie(w, "jwt", "")
 		ClearCookie(w, "refresh", "")
 
-		token, err := auth.GenerateJWT(r.RemoteAddr, ID, AccessTTL)
+		tokens, err := GenerateTokens(r.RemoteAddr, ID, AccessTTL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
-			log.Panicln(err)
-			return
-		}
-		if token == "" {
-			http.Error(w, "token is empty", http.StatusUnauthorized)
-			log.Panicln("token is empty")
+			log.Println(err)
 			return
 		}
 
-		refreshToken, err := auth.GenerateRT()
+		SetCookie(w, "jwt", tokens.JWT, AccessTTL)
+		SetCookie(w, "refresh", tokens.RT, RefreshTTL)
 
-		SetCookie(w, "jwt", token)
-		SetCookie(w, "refresh", refreshToken)
+		go func() {
+			h.SendMail(w, resp, session)
+		}()
 	}
 
 	WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"status": resp,
 	})
+}
+
+func (h *Handlers) SendMail(w http.ResponseWriter, resp string, session *database.MySession) {
+	sender, err := mailer.NewSender(session.Email, h.cnf.AppPass, "smtp.mail.ru", 587)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		return
+	}
+	err = sender.Send(&mailer.EmailInput{
+		To:      session.Email,
+		Subject: "WarningMessage",
+		Body:    resp,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		return
+	}
+}
+
+func GenerateTokens(ip string, id int, TTL time.Duration) (*auth.MyTokens, error) {
+	token, err := auth.GenerateJWT(ip, id, TTL)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	if token == "" {
+		log.Println("token is empty")
+		return nil, err
+	}
+
+	refreshToken, err := auth.GenerateRT()
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return &auth.MyTokens{JWT: token, RT: refreshToken}, nil
 }
 
 func WriteJSON(w http.ResponseWriter, status int, a interface{}) error {

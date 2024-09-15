@@ -28,7 +28,10 @@ func (rp *Repo) GetToken(id int) (string, error) {
 	var refreshToken string
 	query := "SELECT refresh FROM sessions WHERE userID = $1"
 	err := rp.sql.sql.QueryRow(query, id).Scan(&refreshToken)
-	if err == sql.ErrNoRows || err != nil {
+	if err == sql.ErrNoRows {
+		return "", err
+	}
+	if err != nil {
 		log.Panicln(err)
 		return "", err
 	}
