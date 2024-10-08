@@ -1,4 +1,4 @@
-# Тестовое задание на позицию Junior Backend Developer
+# Test task on position Junior Backend Developer
 
 <h2>Configuration</h2>
 
