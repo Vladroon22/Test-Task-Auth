@@ -65,7 +65,7 @@ func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	userID, _ := strconv.Atoi(vars["id"])
 
-	tokens, err := GenerateTokens(r.RemoteAddr, userID, AccessTTL)
+	tokens, err := auth.GenerateTokens(r.RemoteAddr, userID, AccessTTL)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		log.Println(err)
@@ -108,20 +108,16 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := auth.ValidateRT(session.RefreshToken, inp.refresh); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Println(err)
-		return
-	}
-
 	resp := h.sess.CheckSession(ID, r.RemoteAddr, RefreshTTL, session)
 	log.Println(resp)
+
+	currJWT := CheckJWT(w, r)
 
 	if resp != "OK" {
 		ClearCookie(w, "jwt", "")
 		ClearCookie(w, "refresh", "")
 
-		tokens, err := GenerateTokens(r.RemoteAddr, ID, AccessTTL)
+		tokens, err := auth.RefreshTokens(currJWT, inp.refresh, session.RefreshToken, AccessTTL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			log.Println(err)
@@ -141,6 +137,19 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func CheckJWT(w http.ResponseWriter, r *http.Request) string {
+	cookie, err := r.Cookie("jwt")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return ""
+	}
+	if cookie.Value == "" {
+		http.Error(w, "Cookie is empty", http.StatusUnauthorized)
+		return ""
+	}
+	return cookie.Value
+}
+
 func (h *Handlers) SendMail(w http.ResponseWriter, resp string, session *database.MySession) {
 	sender, err := mailer.NewSender(session.Email, h.cnf.AppPass, "smtp.mail.ru", 587)
 	if err != nil {
@@ -158,25 +167,6 @@ func (h *Handlers) SendMail(w http.ResponseWriter, resp string, session *databas
 		log.Println(err)
 		return
 	}
-}
-
-func GenerateTokens(ip string, id int, TTL time.Duration) (*auth.MyTokens, error) {
-	token, err := auth.GenerateJWT(ip, id, TTL)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	if token == "" {
-		log.Println("token is empty")
-		return nil, err
-	}
-
-	refreshToken, err := auth.GenerateRT()
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	return &auth.MyTokens{JWT: token, RT: refreshToken}, nil
 }
 
 func WriteJSON(w http.ResponseWriter, status int, a interface{}) error {
