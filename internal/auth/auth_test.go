@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -34,20 +34,22 @@ func TestGenerateRT(t *testing.T) {
 	rt, err := GenerateRT(id, ip)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, rt)
-
-	err = bcrypt.CompareHashAndPassword([]byte(rt), []byte(rt))
-	assert.Error(t, err, "bcrypt.CompareHashAndPassword should return an error")
 }
 
 func TestValidateRT(t *testing.T) {
-	rt := make([]byte, 32)
-	_, err := rand.Read(rt)
-	assert.NoError(t, err)
+	id := 123
+	ip := "127.0.0.1"
 
-	encodedRT := base64.StdEncoding.EncodeToString(rt)
-	hash, err := bcrypt.GenerateFromPassword(rt, bcrypt.DefaultCost)
+	payload := refreshClaims{ID: id, IP: ip}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Error(err)
+	}
+	encodedRT := base64.StdEncoding.EncodeToString(payloadBytes)
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(encodedRT), bcrypt.DefaultCost)
 	assert.NoError(t, err)
 
 	_, err = ValidateRT(string(hash), encodedRT)
-	assert.Error(t, err, "ValidateRT should return an error for invalid token")
+	assert.NoError(t, err)
 }

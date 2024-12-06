@@ -11,8 +11,6 @@ import (
 	"github.com/Vladroon22/Test-Task-BackDev/internal/auth"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/database"
 	"github.com/Vladroon22/Test-Task-BackDev/internal/mailer"
-	"github.com/Vladroon22/Test-Task-BackDev/internal/service"
-	"github.com/Vladroon22/Test-Task-BackDev/internal/sessions"
 	"github.com/gorilla/mux"
 )
 
@@ -22,17 +20,13 @@ const (
 )
 
 type Handlers struct {
-	db   *database.Repo
-	srv  *service.Service
-	sess *sessions.Session
+	repo *database.Repo
 	cnf  *config.Config
 }
 
-func NewHandler(d *database.Repo, s *service.Service, session *sessions.Session, c *config.Config) *Handlers {
+func NewHandler(r *database.Repo, c *config.Config) *Handlers {
 	return &Handlers{
-		db:   d,
-		srv:  s,
-		sess: session,
+		repo: r,
 		cnf:  c,
 	}
 }
@@ -72,22 +66,21 @@ func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.srv.SaveSession(userID, h.cnf.Email, r.RemoteAddr, time.Now().Add(RefreshTTL), tokens.RT); err != nil {
+	if err := h.repo.SaveSession(userID, h.cnf.Email, r.RemoteAddr, time.Now().Add(RefreshTTL), tokens.RT); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Println(err)
 		return
 	}
 
 	SetCookie(w, "jwt", tokens.JWT, AccessTTL)
-	SetCookie(w, "refresh", tokens.RT, RefreshTTL)
 
 	WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"Session": "OK",
+		"RT": tokens.RT,
 	})
 }
 
 type input struct {
-	refresh string `json:"refresh"`
+	Refresh string `json:"refresh"`
 }
 
 func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
@@ -95,62 +88,51 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	ID, _ := strconv.Atoi(vars["id"])
 
 	inp := input{}
-	if err := json.NewDecoder(r.Body).Decode(&inp.refresh); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&inp); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Println(err)
 		return
 	}
 
-	session, err := h.srv.GetSession(ID)
+	session, err := h.repo.GetSession(ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Println(err)
 		return
 	}
 
-	resp := h.sess.CheckSession(ID, r.RemoteAddr, RefreshTTL, session)
-	log.Println(resp)
-
-	currJWT := CheckJWT(w, r)
-
-	if resp != "OK" {
-		ClearCookie(w, "jwt", "")
-		ClearCookie(w, "refresh", "")
-
-		tokens, err := auth.RefreshTokens(currJWT, inp.refresh, session.RefreshToken, AccessTTL)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			log.Println(err)
+	/*
+		if session.UserIP != r.RemoteAddr {
+			http.Error(w, "Mismatched user's IP", http.StatusForbidden)
+			log.Println("Mismatched user's IP")
 			return
 		}
+	*/
 
-		SetCookie(w, "jwt", tokens.JWT, AccessTTL)
-		SetCookie(w, "refresh", tokens.RT, RefreshTTL)
+	jwt := CheckJWT(w, r)
 
-		go func() {
-			h.SendMail(w, resp, session)
-		}()
+	ClearCookie(w, "jwt", "")
+
+	tokens, err := auth.RefreshTokens(jwt, inp.Refresh, session.RefreshToken, AccessTTL)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		log.Println(err)
+		return
 	}
 
+	SetCookie(w, "jwt", tokens.JWT, AccessTTL)
+
+	go func() {
+		h.sendMail(w, "OK", session)
+	}()
+
 	WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"status": resp,
+		"Access": tokens.JWT,
+		"RT":     tokens.RT,
 	})
 }
 
-func CheckJWT(w http.ResponseWriter, r *http.Request) string {
-	cookie, err := r.Cookie("jwt")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return ""
-	}
-	if cookie.Value == "" {
-		http.Error(w, "Cookie is empty", http.StatusUnauthorized)
-		return ""
-	}
-	return cookie.Value
-}
-
-func (h *Handlers) SendMail(w http.ResponseWriter, resp string, session *database.MySession) {
+func (h *Handlers) sendMail(w http.ResponseWriter, resp string, session *database.MySession) {
 	sender, err := mailer.NewSender(session.Email, h.cnf.AppPass, "smtp.mail.ru", 587)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -167,6 +149,20 @@ func (h *Handlers) SendMail(w http.ResponseWriter, resp string, session *databas
 		log.Println(err)
 		return
 	}
+}
+
+func CheckJWT(w http.ResponseWriter, r *http.Request) string {
+	cookie, err := r.Cookie("jwt")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		log.Println(err)
+		return ""
+	}
+	if cookie.Value == "" {
+		log.Println(err)
+		return ""
+	}
+	return cookie.Value
 }
 
 func WriteJSON(w http.ResponseWriter, status int, a interface{}) error {

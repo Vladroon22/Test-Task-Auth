@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -44,46 +42,35 @@ func GenerateJWT(ip string, id int, TTL time.Duration) (string, error) {
 	return JWT, nil
 }
 
-type refreshPayload struct {
+type refreshClaims struct {
 	ID int    `json:"id"`
 	IP string `json:"ip"`
 }
 
 // generate new refresh token
 func GenerateRT(id int, ip string) (string, error) {
-	rt := make([]byte, 20)
-
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	if _, err := r.Read(rt); err != nil {
-		return "", err
-	}
-
-	RT := base64.StdEncoding.EncodeToString(rt)
-
-	payload := refreshPayload{ID: id, IP: ip}
+	payload := refreshClaims{ID: id, IP: ip}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return "", errors.New("failed to marshal refresh payload: %w" + err.Error())
 	}
+	encodedRT := base64.StdEncoding.EncodeToString(payloadBytes)
+	hash, err := bcrypt.GenerateFromPassword([]byte(encodedRT), bcrypt.DefaultCost)
+	if err != nil {
+		return "", errors.New(err.Error())
+	}
 
-	finalRT := base64.StdEncoding.EncodeToString(payloadBytes) + "." + RT
-
-	return finalRT, nil
+	return string(hash), nil
 }
 
 // validate stored refresh token
-func ValidateRT(storedHash, providedRT string) (*refreshPayload, error) {
-	parts := strings.Split(providedRT, ".")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid token format")
-	}
-
-	decodedPayload, err := base64.StdEncoding.DecodeString(parts[0])
+func ValidateRT(storedHash, providedRT string) (*refreshClaims, error) {
+	decodedPayload, err := base64.StdEncoding.DecodeString(providedRT)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode token payload: %w", err)
 	}
 
-	var payload refreshPayload
+	var payload refreshClaims
 	if err := json.Unmarshal(decodedPayload, &payload); err != nil {
 		return nil, errors.New("failed to unmarshal token payload: %w" + err.Error())
 	}
@@ -118,9 +105,10 @@ func GenerateTokens(ip string, id int, ttlJWT time.Duration) (*MyTokens, error) 
 }
 
 // refresh-token make refresh pair of token based on JWT и RT
-func RefreshTokens(jwtStr, rtStr, storedHash string, ttl time.Duration) (*MyTokens, error) {
-	if _, err := ValidateToken(jwtStr); err == nil {
-		return &MyTokens{JWT: jwtStr, RT: rtStr}, nil
+func RefreshTokens(jwt, rtStr, storedHash string, ttl time.Duration) (*MyTokens, error) {
+	claims, err := ValidateToken(jwt)
+	if err != nil {
+		return nil, err
 	}
 
 	payload, err := ValidateRT(storedHash, rtStr)
@@ -131,6 +119,10 @@ func RefreshTokens(jwtStr, rtStr, storedHash string, ttl time.Duration) (*MyToke
 	newTokens, err := GenerateTokens(payload.IP, payload.ID, ttl)
 	if err != nil {
 		return nil, errors.New("failed to generate new tokens: %w" + err.Error())
+	}
+
+	if claims.IP == payload.IP {
+		return nil, errors.New("tokens are unlinked")
 	}
 
 	return newTokens, nil
