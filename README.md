@@ -1,4 +1,4 @@
-# Test task on position Junior Backend Developer
+# Test task on position Go Backend Developer
 
 <h2>Configuration</h2>
 
