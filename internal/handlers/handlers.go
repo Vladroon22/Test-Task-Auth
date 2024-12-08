@@ -73,13 +73,14 @@ func (h *Handlers) GetPair(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SetCookie(w, "jwt", tokens.JWT, AccessTTL)
+	SetCookie(w, "refresh", tokens.RT, RefreshTTL)
 
 	WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"RT": tokens.RT,
+		"status": "OK",
 	})
 }
 
-type input struct {
+type Req struct {
 	Refresh string `json:"refresh"`
 }
 
@@ -87,9 +88,9 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ID, _ := strconv.Atoi(vars["id"])
 
-	inp := input{}
-	if err := json.NewDecoder(r.Body).Decode(&inp); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	req := &Req{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		log.Println(err)
 		return
 	}
@@ -101,19 +102,16 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	/*
-		if session.UserIP != r.RemoteAddr {
-			http.Error(w, "Mismatched user's IP", http.StatusForbidden)
-			log.Println("Mismatched user's IP")
-			return
-		}
-	*/
+	if session.UserIP != r.RemoteAddr {
+		http.Error(w, "Mismatched user's IP", http.StatusForbidden)
+		log.Println("Mismatched user's IP")
+		go h.sendMail(w, session)
+		return
+	}
 
 	jwt := CheckJWT(w, r)
 
-	ClearCookie(w, "jwt", "")
-
-	tokens, err := auth.RefreshTokens(jwt, inp.Refresh, session.RefreshToken, AccessTTL)
+	tokens, err := auth.RefreshTokens(jwt, req.Refresh, session.RefreshToken, AccessTTL)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		log.Println(err)
@@ -121,18 +119,14 @@ func (h *Handlers) MakeRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SetCookie(w, "jwt", tokens.JWT, AccessTTL)
-
-	go func() {
-		h.sendMail(w, "OK", session)
-	}()
+	SetCookie(w, "refresh", tokens.RT, RefreshTTL)
 
 	WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"Access": tokens.JWT,
-		"RT":     tokens.RT,
+		"status": "OK",
 	})
 }
 
-func (h *Handlers) sendMail(w http.ResponseWriter, resp string, session *database.MySession) {
+func (h *Handlers) sendMail(w http.ResponseWriter, session *database.MySession) {
 	sender, err := mailer.NewSender(session.Email, h.cnf.AppPass, "smtp.mail.ru", 587)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -142,13 +136,14 @@ func (h *Handlers) sendMail(w http.ResponseWriter, resp string, session *databas
 	err = sender.Send(&mailer.EmailInput{
 		To:      session.Email,
 		Subject: "WarningMessage",
-		Body:    resp,
+		Body:    "suspicious activity on your account",
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Println(err)
 		return
 	}
+	ClearCookie(w, "jwt", "")
 }
 
 func CheckJWT(w http.ResponseWriter, r *http.Request) string {
